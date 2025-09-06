@@ -316,11 +316,15 @@ class ProductionGurunaviScraper:
         timing_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 15))
         
         timing_labels = ["最小間隔(秒):", "最大間隔(秒):", "タイムアウト(秒):", "暗黙的待機(秒):"]
+        self.delay_min_var = tk.StringVar(value=str(self.config.get("delay_min", 2.0)))
+        self.delay_max_var = tk.StringVar(value=str(self.config.get("delay_max", 5.0)))
+        self.timeout_var = tk.StringVar(value=str(self.config.get("timeout", 15)))
+        self.implicit_wait_var = tk.StringVar(value=str(self.config.get("implicit_wait", 10)))
         timing_vars = [
-            (self.delay_min_var := tk.StringVar(value=str(self.config.get("delay_min", 2.0)))),
-            (self.delay_max_var := tk.StringVar(value=str(self.config.get("delay_max", 5.0)))),
-            (self.timeout_var := tk.StringVar(value=str(self.config.get("timeout", 15)))),
-            (self.implicit_wait_var := tk.StringVar(value=str(self.config.get("implicit_wait", 10))))
+            self.delay_min_var,
+            self.delay_max_var,
+            self.timeout_var,
+            self.implicit_wait_var
         ]
         
         for i, (label, var) in enumerate(zip(timing_labels, timing_vars)):
@@ -787,8 +791,8 @@ class ProductionGurunaviScraper:
         
         # ぐるなびの店舗URL形式をチェック
         patterns = [
-            r'r\.gnavi\.co\.jp/[a-zA-Z0-9]+/?,
-            r'r\.gnavi\.co\.jp/[a-zA-Z0-9]+/\w*/?
+            r'r\.gnavi\.co\.jp/[a-zA-Z0-9]+/?',
+            r'r\.gnavi\.co\.jp/[a-zA-Z0-9]+/\w*/?'
         ]
         
         return any(re.search(pattern, url) for pattern in patterns)
