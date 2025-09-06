@@ -4,3 +4,5 @@ pandas==2.0.3
 openpyxl==3.1.2
 lxml==4.9.3
 pyinstaller==5.13.0
+selenium==4.15.0
+webdriver-manager==4.0.1
