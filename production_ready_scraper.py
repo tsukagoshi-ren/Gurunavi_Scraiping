@@ -601,7 +601,7 @@ class ProductionGurunaviScraper:
             self.set_scraping_state(False)
     
     def setup_driver(self):
-        """Seleniumドライバー設定"""
+        """修正版Seleniumドライバー設定"""
         try:
             chrome_options = Options()
             
@@ -616,7 +616,12 @@ class ProductionGurunaviScraper:
             chrome_options.add_argument("--disable-extensions")
             chrome_options.add_argument("--disable-plugins")
             chrome_options.add_argument("--disable-images")
-            chrome_options.add_argument("--disable-javascript")  # 必要に応じて削除
+            
+            # 追加の安定性オプション
+            chrome_options.add_argument("--remote-debugging-port=9222")
+            chrome_options.add_argument("--disable-background-timer-throttling")
+            chrome_options.add_argument("--disable-backgrounding-occluded-windows")
+            chrome_options.add_argument("--disable-renderer-backgrounding")
             
             # ウィンドウサイズ
             window_size = self.config.get("window_size", "1920,1080")
@@ -627,8 +632,27 @@ class ProductionGurunaviScraper:
             if user_agent:
                 chrome_options.add_argument(f"--user-agent={user_agent}")
             
-            # ChromeDriverManagerを使用
-            service = Service(ChromeDriverManager().install())
+            # ChromeDriverの取得（修正版）
+            try:
+                # キャッシュを強制クリア
+                import shutil
+                from pathlib import Path
+                wdm_path = Path.home() / ".wdm"
+                if wdm_path.exists():
+                    shutil.rmtree(wdm_path, ignore_errors=True)
+                
+                # 新しいChromeDriverを取得
+                service = Service(ChromeDriverManager().install())
+                
+            except Exception as e:
+                self.logger.error(f"ChromeDriverManager失敗: {e}")
+                # フォールバック: ローカルのchromedriver.exeを使用
+                local_driver = Path.cwd() / "chromedriver.exe"
+                if local_driver.exists():
+                    service = Service(str(local_driver))
+                    self.logger.info("ローカルのChromeDriverを使用します")
+                else:
+                    raise Exception("ChromeDriverが見つかりません。fix_chromedriver.py を実行してください。")
             
             self.driver = webdriver.Chrome(service=service, options=chrome_options)
             self.driver.implicitly_wait(self.config.get("implicit_wait", 10))
@@ -639,9 +663,9 @@ class ProductionGurunaviScraper:
             
         except Exception as e:
             self.logger.error(f"ドライバー初期化エラー: {e}")
-            messagebox.showerror("エラー", f"ブラウザドライバーの初期化に失敗しました:\n{e}")
+            messagebox.showerror("エラー", f"ブラウザドライバーの初期化に失敗しました:\n{e}\n\nfix_chromedriver.py を実行してください。")
             return False
-    
+        
     def cleanup_driver(self):
         """ドライバーのクリーンアップ"""
         if self.driver:

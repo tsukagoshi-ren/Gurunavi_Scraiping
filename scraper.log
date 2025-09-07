@@ -1,0 +1,32 @@
+2025-09-07 01:08:27,687 - INFO - アプリケーション開始
+2025-09-07 01:10:02,410 - INFO - スクレイピング開始
+2025-09-07 01:10:02,410 - INFO - ====== WebDriver manager ======
+2025-09-07 01:10:04,595 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-07 01:10:05,506 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-07 01:10:06,337 - INFO - Driver [C:\Users\rarab\.wdm\drivers\chromedriver\win64\139.0.7258.154\chromedriver-win32/THIRD_PARTY_NOTICES.chromedriver] found in cache
+2025-09-07 01:10:06,374 - ERROR - ドライバー初期化エラー: [WinError 193] %1 は有効な Win32 アプリケーションではありません。
+2025-09-07 01:10:48,970 - INFO - アプリケーションが中断されました
+2025-09-07 01:10:48,970 - INFO - アプリケーション終了
+2025-09-07 01:11:15,649 - INFO - アプリケーション開始
+2025-09-07 01:11:45,819 - INFO - スクレイピング開始
+2025-09-07 01:11:45,826 - INFO - ====== WebDriver manager ======
+2025-09-07 01:11:47,701 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-07 01:11:48,508 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-07 01:11:49,352 - INFO - Driver [C:\Users\rarab\.wdm\drivers\chromedriver\win64\139.0.7258.154\chromedriver-win32/THIRD_PARTY_NOTICES.chromedriver] found in cache
+2025-09-07 01:11:49,352 - ERROR - ドライバー初期化エラー: [WinError 193] %1 は有効な Win32 アプリケーションではありません。
+2025-09-07 11:44:45,948 - INFO - アプリケーション終了
+2025-09-07 11:58:23,344 - INFO - アプリケーション開始
+2025-09-07 11:58:35,394 - INFO - スクレイピング開始
+2025-09-07 11:58:35,417 - INFO - ====== WebDriver manager ======
+2025-09-07 11:58:36,360 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-07 11:58:36,795 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-07 11:58:37,239 - INFO - There is no [win64] chromedriver "139.0.7258.154" for browser google-chrome "139.0.7258" in cache
+2025-09-07 11:58:37,239 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-07 11:58:38,328 - INFO - WebDriver version 139.0.7258.154 selected
+2025-09-07 11:58:38,348 - INFO - Modern chrome version https://storage.googleapis.com/chrome-for-testing-public/139.0.7258.154/win32/chromedriver-win32.zip
+2025-09-07 11:58:38,349 - INFO - About to download new driver from https://storage.googleapis.com/chrome-for-testing-public/139.0.7258.154/win32/chromedriver-win32.zip
+2025-09-07 11:58:38,977 - INFO - Driver downloading response is 200
+2025-09-07 11:58:41,906 - INFO - Get LATEST chromedriver version for google-chrome
+2025-09-07 11:58:42,478 - INFO - Driver has been saved in cache [C:\Users\rarab\.wdm\drivers\chromedriver\win64\139.0.7258.154]
+2025-09-07 11:58:42,516 - ERROR - ドライバー初期化エラー: [WinError 193] %1 は有効な Win32 アプリケーションではありません。
+2025-09-07 11:59:21,059 - INFO - アプリケーション終了
