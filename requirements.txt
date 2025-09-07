@@ -1,8 +1,22 @@
+# ぐるなびスクレイピングツール v2.0 - 必要パッケージ
+# Core dependencies
 requests==2.31.0
 beautifulsoup4==4.12.2
+lxml==4.9.3
+
+# Data processing
 pandas==2.0.3
 openpyxl==3.1.2
-lxml==4.9.3
-pyinstaller==5.13.0
+
+# Web automation
 selenium==4.15.0
 webdriver-manager==4.0.1
+
+# Packaging (開発者向け)
+pyinstaller==5.13.0
+
+# Additional utilities
+Pillow==10.0.0
+python-dateutil==2.8.2
+urllib3==2.0.4
+certifi==2023.7.22

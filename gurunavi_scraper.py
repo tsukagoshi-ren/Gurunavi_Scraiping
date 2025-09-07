@@ -1,6 +1,5 @@
 """
-ぐるなび店舗情報スクレイピングツール v2.0 (修正版)
-
+ぐるなび店舗情報スクレイピングツール v2.0 (統合版)
 ChromeDriverエラーを修正した本格運用版
 """
 
@@ -19,6 +18,9 @@ import random
 import json
 import logging
 from pathlib import Path
+import subprocess
+import shutil
+import zipfile
 
 # Selenium imports
 try:
@@ -39,10 +41,293 @@ except ImportError:
     SELENIUM_AVAILABLE = False
     WEBDRIVER_MANAGER_AVAILABLE = False
 
-class ProductionGurunaviScraper:
+class ChromeDriverFixer:
+    """ChromeDriver修正クラス"""
+    
+    @staticmethod
+    def fix_chromedriver():
+        """ChromeDriverの完全修正"""
+        print("=" * 50)
+        print("ChromeDriver完全修正開始")
+        print("=" * 50)
+        
+        try:
+            # 1. キャッシュクリア
+            print("\n[1/7] 既存のChromeDriverキャッシュをクリア中...")
+            wdm_path = Path.home() / ".wdm"
+            if wdm_path.exists():
+                shutil.rmtree(wdm_path, ignore_errors=True)
+                print("✅ webdriver-managerキャッシュをクリアしました")
+            
+            # ローカルのchromedriver.exeも削除
+            local_drivers = [Path.cwd() / "chromedriver.exe", Path.cwd() / "chromedriver"]
+            for driver_path in local_drivers:
+                if driver_path.exists():
+                    driver_path.unlink()
+                    print(f"✅ ローカルドライバーを削除: {driver_path}")
+            
+            # 2. Chromeバージョン取得
+            print("\n[2/7] Chromeブラウザのバージョン確認中...")
+            chrome_version = ChromeDriverFixer.get_chrome_version()
+            if chrome_version:
+                print(f"✅ Chrome バージョン: {chrome_version}")
+            else:
+                print("⚠️ Chromeのバージョンを自動検出できませんでした")
+                chrome_version = "139.0.7258.154"  # デフォルト
+            
+            # 3. 手動ダウンロード
+            print("\n[3/7] ChromeDriverを手動ダウンロード中...")
+            driver_path = ChromeDriverFixer.manual_download_chromedriver(chrome_version)
+            
+            if not driver_path:
+                print("❌ 手動ダウンロードに失敗しました")
+                return False
+            
+            # 4. ファイル検証
+            print("\n[4/7] ダウンロードファイルを検証中...")
+            if not ChromeDriverFixer.validate_chromedriver(driver_path):
+                print("❌ ChromeDriverファイルが無効です")
+                return False
+            
+            # 5. ローカルにコピー
+            print("\n[5/7] ChromeDriverをローカルディレクトリにコピー中...")
+            local_driver_path = Path.cwd() / "chromedriver.exe"
+            shutil.copy2(driver_path, local_driver_path)
+            print(f"✅ ローカルにコピー完了: {local_driver_path}")
+            
+            # 6. テスト実行
+            print("\n[6/7] ChromeDriverのテスト実行中...")
+            if ChromeDriverFixer.test_chromedriver(local_driver_path):
+                print("✅ ChromeDriverテスト成功")
+            else:
+                print("❌ ChromeDriverテスト失敗")
+                return False
+            
+            # 7. 設定ファイル更新
+            print("\n[7/7] 設定ファイルを更新中...")
+            ChromeDriverFixer.update_config_file(str(local_driver_path))
+            
+            print("\n" + "=" * 50)
+            print("✅ ChromeDriver修正完了！")
+            print(f"📁 ChromeDriverパス: {local_driver_path}")
+            print("=" * 50)
+            return True
+            
+        except Exception as e:
+            print(f"\n❌ 修正中にエラーが発生しました: {e}")
+            return False
+        finally:
+            ChromeDriverFixer.cleanup_temp_files()
+    
+    @staticmethod
+    def get_chrome_version():
+        """Chromeのバージョンを取得"""
+        try:
+            # Windows Registry から取得
+            result = subprocess.run([
+                "reg", "query", 
+                "HKEY_CURRENT_USER\\Software\\Google\\Chrome\\BLBeacon", 
+                "/v", "version"
+            ], capture_output=True, text=True)
+            
+            if result.returncode == 0:
+                return result.stdout.split()[-1]
+            
+            # Chrome実行ファイルから取得
+            chrome_paths = [
+                r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+                r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"
+            ]
+            
+            for chrome_path in chrome_paths:
+                if os.path.exists(chrome_path):
+                    result = subprocess.run([chrome_path, "--version"], 
+                                          capture_output=True, text=True)
+                    if result.returncode == 0:
+                        version_line = result.stdout.strip()
+                        version = version_line.split()[-1]
+                        return version
+            
+            return None
+            
+        except Exception as e:
+            print(f"Chromeバージョン取得エラー: {e}")
+            return None
+    
+    @staticmethod
+    def manual_download_chromedriver(chrome_version):
+        """ChromeDriverを手動でダウンロード"""
+        try:
+            major_version = chrome_version.split('.')[0]
+            print(f"Chrome {major_version} 用のChromeDriverを検索中...")
+            
+            # 複数バージョンを試行
+            test_versions = [
+                chrome_version,
+                f"{major_version}.0.7258.154",
+                f"{major_version}.0.7258.149", 
+                f"{major_version}.0.7258.125",
+                "138.0.7138.140",  # フォールバック
+                "137.0.7187.125"   # フォールバック
+            ]
+            
+            for version in test_versions:
+                print(f"バージョン {version} を試行中...")
+                url = f"https://storage.googleapis.com/chrome-for-testing-public/{version}/win64/chromedriver-win64.zip"
+                
+                try:
+                    response = requests.head(url, timeout=10)
+                    if response.status_code == 200:
+                        print(f"✅ バージョン {version} が利用可能です")
+                        return ChromeDriverFixer.download_and_extract_chromedriver(url, version)
+                except requests.RequestException:
+                    continue
+            
+            print("❌ 利用可能なChromeDriverが見つかりませんでした")
+            return None
+            
+        except Exception as e:
+            print(f"手動ダウンロードエラー: {e}")
+            return None
+    
+    @staticmethod
+    def download_and_extract_chromedriver(url, version):
+        """ChromeDriverをダウンロードして展開"""
+        try:
+            print(f"ダウンロード中: {url}")
+            
+            # ダウンロード
+            response = requests.get(url, timeout=30)
+            response.raise_for_status()
+            
+            # 一時ファイルに保存
+            temp_dir = Path.cwd() / "temp_chromedriver"
+            temp_dir.mkdir(exist_ok=True)
+            zip_path = temp_dir / f"chromedriver_{version}.zip"
+            
+            with open(zip_path, 'wb') as f:
+                f.write(response.content)
+            
+            print(f"✅ ダウンロード完了: {len(response.content):,} bytes")
+            
+            # ZIPファイルを展開
+            extract_dir = temp_dir / f"chromedriver_{version}"
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                zip_ref.extractall(extract_dir)
+            
+            # chromedriver.exe を検索
+            chromedriver_paths = list(extract_dir.rglob("chromedriver.exe"))
+            
+            if chromedriver_paths:
+                driver_path = chromedriver_paths[0]
+                print(f"✅ ChromeDriverを発見: {driver_path}")
+                return driver_path
+            else:
+                print("❌ 展開したファイルにchromedriver.exeが見つかりません")
+                return None
+                
+        except Exception as e:
+            print(f"ダウンロード・展開エラー: {e}")
+            return None
+    
+    @staticmethod
+    def validate_chromedriver(driver_path):
+        """ChromeDriverファイルを検証"""
+        try:
+            if not driver_path or not Path(driver_path).exists():
+                print("❌ ファイルが存在しません")
+                return False
+            
+            file_size = Path(driver_path).stat().st_size
+            print(f"✅ ファイルサイズ: {file_size:,} bytes")
+            
+            # ファイルサイズチェック
+            if file_size < 1000000:  # 1MB未満は異常
+                print("❌ ファイルサイズが小さすぎます")
+                return False
+            
+            # 実行可能ファイルかチェック
+            if not str(driver_path).endswith('.exe'):
+                print("❌ 実行可能ファイルではありません")
+                return False
+            
+            print("✅ ファイル検証成功")
+            return True
+            
+        except Exception as e:
+            print(f"ファイル検証エラー: {e}")
+            return False
+    
+    @staticmethod
+    def test_chromedriver(driver_path):
+        """ChromeDriverをテスト実行"""
+        try:
+            print("ChromeDriverテスト実行中...")
+            
+            chrome_options = Options()
+            chrome_options.add_argument("--headless")
+            chrome_options.add_argument("--no-sandbox")
+            chrome_options.add_argument("--disable-dev-shm-usage")
+            chrome_options.add_argument("--disable-gpu")
+            chrome_options.add_argument("--disable-web-security")
+            chrome_options.add_argument("--remote-debugging-port=9222")
+            
+            service = Service(str(driver_path))
+            driver = webdriver.Chrome(service=service, options=chrome_options)
+            
+            # 簡単なテスト
+            driver.get("https://www.google.com")
+            title = driver.title
+            
+            driver.quit()
+            
+            print(f"✅ テスト成功: {title}")
+            return True
+            
+        except Exception as e:
+            print(f"テスト実行エラー: {e}")
+            return False
+    
+    @staticmethod
+    def update_config_file(driver_path):
+        """設定ファイルを更新"""
+        try:
+            config_file = Path("scraper_config.json")
+            
+            if config_file.exists():
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+            else:
+                config = {}
+            
+            config["chromedriver_path"] = driver_path
+            config["last_chromedriver_update"] = str(Path().cwd())
+            
+            with open(config_file, 'w', encoding='utf-8') as f:
+                json.dump(config, f, ensure_ascii=False, indent=2)
+            
+            print("✅ 設定ファイルを更新しました")
+            
+        except Exception as e:
+            print(f"⚠️ 設定ファイル更新エラー: {e}")
+    
+    @staticmethod
+    def cleanup_temp_files():
+        """一時ファイルをクリーンアップ"""
+        try:
+            temp_dir = Path.cwd() / "temp_chromedriver"
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir)
+                print("✅ 一時ファイルをクリーンアップしました")
+        except Exception as e:
+            print(f"⚠️ クリーンアップエラー: {e}")
+
+class GurunaviScraper:
+    """ぐるなびスクレイピングメインクラス"""
+    
     def __init__(self):
         self.window = tk.Tk()
-        self.window.title("ぐるなび店舗情報スクレイピングツール v2.0 (修正版)")
+        self.window.title("ぐるなび店舗情報スクレイピングツール v2.0")
         self.window.geometry("950x750")
         self.window.resizable(True, True)
         
@@ -126,7 +411,7 @@ class ProductionGurunaviScraper:
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
         # タイトル
-        title_label = ttk.Label(main_frame, text="ぐるなび店舗情報スクレイピングツール v2.0 (修正版)", 
+        title_label = ttk.Label(main_frame, text="ぐるなび店舗情報スクレイピングツール v2.0", 
                                font=('Arial', 16, 'bold'))
         title_label.grid(row=0, column=0, columnspan=4, pady=(0, 20))
         
@@ -173,7 +458,7 @@ class ProductionGurunaviScraper:
         if local_driver.exists():
             return {
                 "available": True,
-                "message": f"ChromeDriver: ローカル版利用可能 ({local_driver})"
+                "message": f"ChromeDriver: ローカル版利用可能"
             }
         
         # 設定ファイルのパスをチェック
@@ -193,7 +478,7 @@ class ProductionGurunaviScraper:
         
         return {
             "available": False,
-            "message": "ChromeDriver: 利用不可 - fix_chromedriver_ultimate.py を実行してください"
+            "message": "ChromeDriver: 利用不可 - 「ChromeDriver修正」ボタンを押してください"
         }
     
     def setup_main_tab(self):
@@ -260,12 +545,8 @@ class ProductionGurunaviScraper:
         control_frame.grid(row=2, column=0, columnspan=4, pady=(0, 15))
         
         self.start_button = ttk.Button(control_frame, text="スクレイピング開始", 
-                                      command=self.start_scraping, style='Accent.TButton')
+                                      command=self.start_scraping)
         self.start_button.pack(side=tk.LEFT, padx=(0, 10))
-        
-        self.pause_button = ttk.Button(control_frame, text="一時停止", 
-                                      command=self.pause_scraping, state='disabled')
-        self.pause_button.pack(side=tk.LEFT, padx=(0, 10))
         
         self.stop_button = ttk.Button(control_frame, text="停止", 
                                      command=self.stop_scraping, state='disabled')
@@ -353,12 +634,7 @@ class ProductionGurunaviScraper:
         self.delay_max_var = tk.StringVar(value=str(self.config.get("delay_max", 5.0)))
         self.timeout_var = tk.StringVar(value=str(self.config.get("timeout", 15)))
         self.implicit_wait_var = tk.StringVar(value=str(self.config.get("implicit_wait", 10)))
-        timing_vars = [
-            self.delay_min_var,
-            self.delay_max_var,
-            self.timeout_var,
-            self.implicit_wait_var
-        ]
+        timing_vars = [self.delay_min_var, self.delay_max_var, self.timeout_var, self.implicit_wait_var]
         
         for i, (label, var) in enumerate(zip(timing_labels, timing_vars)):
             row = i // 2
@@ -468,36 +744,22 @@ class ProductionGurunaviScraper:
         
         if result:
             try:
-                # fix_chromedriver_ultimate.py を実行
-                import subprocess
-                script_path = Path.cwd() / "fix_chromedriver_ultimate.py"
+                self.status_var.set("ChromeDriver修正中...")
+                self.window.update()
                 
-                if script_path.exists():
-                    self.status_var.set("ChromeDriver修正中...")
-                    result = subprocess.run([
-                        "python", str(script_path)
-                    ], capture_output=True, text=True)
-                    
-                    if result.returncode == 0:
-                        messagebox.showinfo("修正完了", "ChromeDriverの修正が完了しました。")
-                        self.logger.info("ChromeDriver修正完了")
-                        # UIステータスを更新
-                        self.window.after(100, self.refresh_chromedriver_status)
-                    else:
-                        messagebox.showerror("修正失敗", f"ChromeDriverの修正に失敗しました:\n{result.stderr}")
+                # ChromeDriverFixerを使用して修正
+                success = ChromeDriverFixer.fix_chromedriver()
+                
+                if success:
+                    messagebox.showinfo("修正完了", "ChromeDriverの修正が完了しました。")
+                    self.logger.info("ChromeDriver修正完了")
                 else:
-                    messagebox.showerror("エラー", "fix_chromedriver_ultimate.py が見つかりません。")
+                    messagebox.showerror("修正失敗", "ChromeDriverの修正に失敗しました。")
                     
             except Exception as e:
                 messagebox.showerror("エラー", f"ChromeDriver修正中にエラーが発生しました:\n{e}")
             finally:
                 self.status_var.set("準備完了")
-    
-    def refresh_chromedriver_status(self):
-        """ChromeDriverステータスを更新"""
-        # UIの再構築は複雑なので、ログに記録するのみ
-        status = self.check_chromedriver_status()
-        self.logger.info(f"ChromeDriverステータス更新: {status['message']}")
     
     def save_current_config(self):
         """現在の設定を保存"""
@@ -521,7 +783,7 @@ class ProductionGurunaviScraper:
     def reset_config(self):
         """設定をデフォルトに戻す"""
         if messagebox.askyesno("確認", "設定をデフォルトに戻しますか？"):
-            self.load_config()  # デフォルト設定で再読み込み
+            self.load_config()
             # UI要素を更新
             self.headless_var.set(self.config.get("headless", True))
             self.window_size_var.set(self.config.get("window_size", "1920,1080"))
@@ -573,18 +835,12 @@ class ProductionGurunaviScraper:
     
     def start_scraping(self):
         """スクレイピング開始"""
-        # バリデーション
         if not self.validate_inputs():
             return
         
-        # ボタン状態制御
         self.set_scraping_state(True)
-        
-        # データ初期化
         self.scraped_data = []
         self.total_found = 0
-        
-        # 結果テーブルクリア
         self.clear_results()
         
         # スレッドでスクレイピング実行
@@ -614,7 +870,6 @@ class ProductionGurunaviScraper:
             messagebox.showerror("エラー", "Seleniumが利用できません。\npip install selenium で インストールしてください。")
             return False
         
-        # ChromeDriverチェック
         driver_status = self.check_chromedriver_status()
         if not driver_status["available"]:
             messagebox.showerror("エラー", "ChromeDriverが利用できません。\n「ChromeDriver修正」ボタンを押してください。")
@@ -626,13 +881,7 @@ class ProductionGurunaviScraper:
         """スクレイピング状態の制御"""
         self.is_scraping = is_scraping
         self.start_button.config(state='disabled' if is_scraping else 'normal')
-        self.pause_button.config(state='normal' if is_scraping else 'disabled')
         self.stop_button.config(state='normal' if is_scraping else 'disabled')
-    
-    def pause_scraping(self):
-        """スクレイピング一時停止"""
-        # 実装は簡略化（実際には一時停止ロジックが必要）
-        messagebox.showinfo("一時停止", "一時停止機能は今後の実装予定です。")
     
     def stop_scraping(self):
         """スクレイピング停止"""
@@ -666,16 +915,12 @@ class ProductionGurunaviScraper:
             self.logger.info("スクレイピング開始")
             self.status_var.set("初期化中...")
             
-            # ドライバー設定
             if not self.setup_driver():
                 return
             
             max_count = int(self.max_count_var.get())
-            
-            # 実際のスクレイピング実装
             self.perform_scraping(max_count)
             
-            # 完了処理
             if self.is_scraping:
                 self.save_to_excel()
                 self.status_var.set(f"完了: {len(self.scraped_data)}件取得")
@@ -689,38 +934,28 @@ class ProductionGurunaviScraper:
             self.set_scraping_state(False)
     
     def setup_driver(self):
-        """修正版Seleniumドライバー設定"""
+        """Seleniumドライバー設定"""
         try:
             chrome_options = Options()
             
-            # 基本設定
             if self.config.get("headless", True):
                 chrome_options.add_argument("--headless")
             
-            # セキュリティ・パフォーマンス設定
             chrome_options.add_argument("--no-sandbox")
             chrome_options.add_argument("--disable-dev-shm-usage")
             chrome_options.add_argument("--disable-gpu")
             chrome_options.add_argument("--disable-extensions")
             chrome_options.add_argument("--disable-plugins")
             chrome_options.add_argument("--disable-images")
-            
-            # 追加の安定性オプション
             chrome_options.add_argument("--remote-debugging-port=9222")
-            chrome_options.add_argument("--disable-background-timer-throttling")
-            chrome_options.add_argument("--disable-backgrounding-occluded-windows")
-            chrome_options.add_argument("--disable-renderer-backgrounding")
             
-            # ウィンドウサイズ
             window_size = self.config.get("window_size", "1920,1080")
             chrome_options.add_argument(f"--window-size={window_size}")
             
-            # ユーザーエージェント
             user_agent = self.config.get("user_agent")
             if user_agent:
                 chrome_options.add_argument(f"--user-agent={user_agent}")
             
-            # ChromeDriverの取得（修正版）
             driver_path = self.get_chromedriver_path()
             if not driver_path:
                 raise Exception("ChromeDriverが見つかりません。「ChromeDriver修正」ボタンを押してください。")
@@ -775,14 +1010,12 @@ class ProductionGurunaviScraper:
     def perform_scraping(self, max_count):
         """実際のスクレイピング処理"""
         try:
-            # 検索URL構築
             search_url = self.build_search_url()
             self.logger.info(f"検索URL: {search_url}")
             
             self.status_var.set("検索ページにアクセス中...")
             self.driver.get(search_url)
             
-            # ページ読み込み待機
             WebDriverWait(self.driver, 10).until(
                 EC.presence_of_element_located((By.TAG_NAME, "body"))
             )
@@ -794,14 +1027,12 @@ class ProductionGurunaviScraper:
                 self.status_var.set(f"ページ {page_num} を処理中... ({collected_count}/{max_count})")
                 self.logger.info(f"ページ {page_num} の処理開始")
                 
-                # 店舗リンクを取得
                 store_links = self.extract_store_links()
                 
                 if not store_links:
                     self.logger.info("店舗リンクが見つかりませんでした。検索終了。")
                     break
                 
-                # 各店舗の詳細情報を取得
                 for i, link in enumerate(store_links):
                     if not self.is_scraping or collected_count >= max_count:
                         break
@@ -813,24 +1044,20 @@ class ProductionGurunaviScraper:
                         collected_count += 1
                         self.scraped_data.append(store_data)
                         
-                        # UI更新
                         self.update_result_display(store_data, collected_count)
                         
-                        # プログレスバー更新
                         progress = min((collected_count / max_count) * 100, 100)
                         self.progress_var.set(progress)
                         self.count_var.set(f"取得件数: {collected_count}")
                         
                         self.window.update_idletasks()
                     
-                    # アクセス間隔制御
                     self.smart_delay()
                 
-                # 次のページへ移動
                 if collected_count < max_count and self.has_next_page():
                     self.go_to_next_page()
                     page_num += 1
-                    time.sleep(random.uniform(2, 4))  # ページ間待機
+                    time.sleep(random.uniform(2, 4))
                 else:
                     break
             
@@ -844,16 +1071,13 @@ class ProductionGurunaviScraper:
         """検索URLを構築"""
         base_url = "https://r.gnavi.co.jp/area/jp/rs/"
         
-        # 実際のぐるなびの検索パラメータ構造に合わせて実装
         params = []
-        
         prefecture = self.prefecture_var.get()
         city = self.city_var.get()
         genre = self.genre_var.get()
         station = self.station_var.get()
         keyword = self.keyword_var.get()
         
-        # パラメータ構築（実際のサイト構造に合わせて調整必要）
         if prefecture:
             params.append(f"pref={quote(prefecture)}")
         if city:
@@ -873,7 +1097,6 @@ class ProductionGurunaviScraper:
     def extract_store_links(self):
         """ページから店舗リンクを抽出"""
         try:
-            # ぐるなびの店舗リンクパターンに合わせて実装
             link_selectors = [
                 "a[href*='r.gnavi.co.jp/'][href*='/']",
                 ".item-name a",
@@ -892,11 +1115,10 @@ class ProductionGurunaviScraper:
                 except:
                     continue
             
-            # 重複除去
             unique_links = list(set(links))
             self.logger.info(f"ページから {len(unique_links)} 件の店舗リンクを抽出")
             
-            return unique_links[:20]  # 1ページあたり最大20件に制限
+            return unique_links[:20]
             
         except Exception as e:
             self.logger.error(f"店舗リンク抽出エラー: {e}")
@@ -907,7 +1129,6 @@ class ProductionGurunaviScraper:
         if not url:
             return False
         
-        # ぐるなびの店舗URL形式をチェック
         patterns = [
             r'r\.gnavi\.co\.jp/[a-zA-Z0-9]+/?',
             r'r\.gnavi\.co\.jp/[a-zA-Z0-9]+/\w*/?'
@@ -920,13 +1141,11 @@ class ProductionGurunaviScraper:
         try:
             self.logger.debug(f"店舗詳細取得開始: {url}")
             
-            # ページにアクセス
             self.driver.get(url)
             WebDriverWait(self.driver, 10).until(
                 EC.presence_of_element_located((By.TAG_NAME, "body"))
             )
             
-            # 店舗情報を抽出
             store_data = {
                 'URL': url,
                 '店舗名': self.extract_store_name(),
@@ -945,7 +1164,6 @@ class ProductionGurunaviScraper:
                 '取得日時': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             }
             
-            # データクリーニング
             for key, value in store_data.items():
                 if isinstance(value, str):
                     store_data[key] = value.strip()
@@ -959,29 +1177,14 @@ class ProductionGurunaviScraper:
     
     def extract_store_name(self):
         """店舗名を抽出"""
-        selectors = [
-            'h1.shop-name',
-            'h1[class*="name"]',
-            '.restaurant-name h1',
-            '.shop-title h1',
-            '.store-name',
-            'h1'
-        ]
+        selectors = ['h1.shop-name', 'h1[class*="name"]', '.restaurant-name h1', '.shop-title h1', '.store-name', 'h1']
         return self.extract_text_by_selectors(selectors)
     
     def extract_phone_number(self):
         """電話番号を抽出"""
-        selectors = [
-            'a[href^="tel:"]',
-            '.phone',
-            '.tel',
-            '[class*="phone"]',
-            '[class*="tel"]'
-        ]
-        
+        selectors = ['a[href^="tel:"]', '.phone', '.tel', '[class*="phone"]', '[class*="tel"]']
         text = self.extract_text_by_selectors(selectors)
         if text:
-            # 電話番号パターンの抽出
             phone_match = re.search(r'(\d{2,4}[-\s]?\d{2,4}[-\s]?\d{4})', text)
             if phone_match:
                 return phone_match.group(1)
@@ -989,107 +1192,57 @@ class ProductionGurunaviScraper:
     
     def extract_address(self):
         """住所を抽出"""
-        selectors = [
-            '.address',
-            '.shop-address',
-            '[class*="address"]',
-            '.location'
-        ]
+        selectors = ['.address', '.shop-address', '[class*="address"]', '.location']
         return self.extract_text_by_selectors(selectors)
     
     def extract_genre(self):
         """ジャンルを抽出"""
-        selectors = [
-            '.genre',
-            '.category',
-            '[class*="genre"]',
-            '[class*="category"]'
-        ]
+        selectors = ['.genre', '.category', '[class*="genre"]', '[class*="category"]']
         return self.extract_text_by_selectors(selectors)
     
     def extract_station(self):
         """最寄り駅を抽出"""
-        selectors = [
-            '.station',
-            '.access',
-            '[class*="station"]',
-            '[class*="access"]'
-        ]
+        selectors = ['.station', '.access', '[class*="station"]', '[class*="access"]']
         return self.extract_text_by_selectors(selectors)
     
     def extract_business_hours(self):
         """営業時間を抽出"""
-        selectors = [
-            '.business-hours',
-            '.opening-hours',
-            '[class*="hours"]',
-            '[class*="time"]'
-        ]
+        selectors = ['.business-hours', '.opening-hours', '[class*="hours"]', '[class*="time"]']
         return self.extract_text_by_selectors(selectors)
     
     def extract_holiday(self):
         """定休日を抽出"""
-        selectors = [
-            '.holiday',
-            '.closed',
-            '[class*="holiday"]',
-            '[class*="closed"]'
-        ]
+        selectors = ['.holiday', '.closed', '[class*="holiday"]', '[class*="closed"]']
         return self.extract_text_by_selectors(selectors)
     
     def extract_seats(self):
         """座席数を抽出"""
-        selectors = [
-            '.seats',
-            '.capacity',
-            '[class*="seat"]'
-        ]
+        selectors = ['.seats', '.capacity', '[class*="seat"]']
         return self.extract_text_by_selectors(selectors)
     
     def extract_budget(self):
         """予算を抽出"""
-        selectors = [
-            '.budget',
-            '.price',
-            '[class*="budget"]',
-            '[class*="price"]'
-        ]
+        selectors = ['.budget', '.price', '[class*="budget"]', '[class*="price"]']
         return self.extract_text_by_selectors(selectors)
     
     def extract_private_room(self):
         """個室情報を抽出"""
-        selectors = [
-            '.private-room',
-            '[class*="private"]',
-            '[class*="room"]'
-        ]
+        selectors = ['.private-room', '[class*="private"]', '[class*="room"]']
         return self.extract_text_by_selectors(selectors)
     
     def extract_smoking(self):
         """喫煙情報を抽出"""
-        selectors = [
-            '.smoking',
-            '[class*="smoking"]',
-            '[class*="smoke"]'
-        ]
+        selectors = ['.smoking', '[class*="smoking"]', '[class*="smoke"]']
         return self.extract_text_by_selectors(selectors)
     
     def extract_parking(self):
         """駐車場情報を抽出"""
-        selectors = [
-            '.parking',
-            '[class*="parking"]',
-            '[class*="park"]'
-        ]
+        selectors = ['.parking', '[class*="parking"]', '[class*="park"]']
         return self.extract_text_by_selectors(selectors)
     
     def extract_credit_card(self):
         """クレジットカード情報を抽出"""
-        selectors = [
-            '.credit-card',
-            '[class*="credit"]',
-            '[class*="card"]'
-        ]
+        selectors = ['.credit-card', '[class*="credit"]', '[class*="card"]']
         return self.extract_text_by_selectors(selectors)
     
     def extract_text_by_selectors(self, selectors):
@@ -1110,12 +1263,7 @@ class ProductionGurunaviScraper:
     def has_next_page(self):
         """次のページが存在するかチェック"""
         try:
-            next_selectors = [
-                "a[class*='next']",
-                ".pager_next a",
-                ".next a",
-                "a[href*='page=']"
-            ]
+            next_selectors = ["a[class*='next']", ".pager_next a", ".next a", "a[href*='page=']"]
             
             for selector in next_selectors:
                 try:
@@ -1133,11 +1281,7 @@ class ProductionGurunaviScraper:
     def go_to_next_page(self):
         """次のページに移動"""
         try:
-            next_selectors = [
-                "a[class*='next']",
-                ".pager_next a",
-                ".next a"
-            ]
+            next_selectors = ["a[class*='next']", ".pager_next a", ".next a"]
             
             for selector in next_selectors:
                 try:
@@ -1172,7 +1316,6 @@ class ProductionGurunaviScraper:
             store_data.get('最寄り駅', '')
         ))
         
-        # 最新行を表示
         children = self.tree.get_children()
         if children:
             self.tree.see(children[-1])
@@ -1193,24 +1336,13 @@ class ProductionGurunaviScraper:
             
             full_path = os.path.join(save_path, filename)
             
-            # Excelファイルに保存（複数シート）
             with pd.ExcelWriter(full_path, engine='openpyxl') as writer:
-                # メインデータシート
                 df.to_excel(writer, sheet_name='店舗データ', index=False)
-                
-                # 統計シート
                 self.create_statistics_sheet(df, writer)
-                
-                # ジャンル別集計シート
                 self.create_genre_summary_sheet(df, writer)
-                
-                # エリア別集計シート
                 self.create_area_summary_sheet(df, writer)
-                
-                # 列幅調整
                 self.adjust_column_width(writer)
             
-            # 設定保存
             self.config["last_save_path"] = save_path
             self.save_config()
             
@@ -1224,14 +1356,7 @@ class ProductionGurunaviScraper:
     def create_statistics_sheet(self, df, writer):
         """統計情報シートを作成"""
         stats_data = {
-            '項目': [
-                '総取得件数',
-                '電話番号あり',
-                '住所あり',
-                'ジャンル情報あり',
-                '営業時間あり',
-                '最寄り駅あり'
-            ],
+            '項目': ['総取得件数', '電話番号あり', '住所あり', 'ジャンル情報あり', '営業時間あり', '最寄り駅あり'],
             '件数': [
                 len(df),
                 df['電話番号'].notna().sum() if '電話番号' in df.columns else 0,
@@ -1257,7 +1382,6 @@ class ProductionGurunaviScraper:
             genre_counts = df['ジャンル'].value_counts().reset_index()
             genre_counts.columns = ['ジャンル', '件数']
             
-            # 割合を追加
             total = len(df)
             genre_counts['割合(%)'] = (genre_counts['件数'] / total * 100).round(1)
             
@@ -1266,7 +1390,6 @@ class ProductionGurunaviScraper:
     def create_area_summary_sheet(self, df, writer):
         """エリア別集計シートを作成"""
         if '住所' in df.columns:
-            # 都道府県を抽出
             prefecture_pattern = r'(.*?[都道府県])'
             df_copy = df.copy()
             df_copy['都道府県'] = df_copy['住所'].str.extract(prefecture_pattern)[0]
@@ -1274,7 +1397,6 @@ class ProductionGurunaviScraper:
             area_counts = df_copy['都道府県'].value_counts().reset_index()
             area_counts.columns = ['都道府県', '件数']
             
-            # 割合を追加
             total = len(df_copy)
             area_counts['割合(%)'] = (area_counts['件数'] / total * 100).round(1)
             
@@ -1311,7 +1433,7 @@ class ProductionGurunaviScraper:
 def main():
     """メイン関数"""
     try:
-        app = ProductionGurunaviScraper()
+        app = GurunaviScraper()
         app.run()
     except Exception as e:
         logging.error(f"アプリケーション起動エラー: {e}")
