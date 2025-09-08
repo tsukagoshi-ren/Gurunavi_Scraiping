@@ -19,6 +19,8 @@ from pathlib import Path
 import subprocess
 import shutil
 import zipfile
+import requests
+import pandas as pd
 
 # Selenium imports
 try:
@@ -544,7 +546,8 @@ class GurunaviScraper:
             self.url_var.set(url)
             
         except Exception as e:
-            self.url_var.set(f"URL生成エラー: {e}")
+            self.logger.error(f"検索URL更新エラー: {e}")
+            self.url_var.set("URL生成エラー")
     
     def browse_save_path(self):
         """保存先選択"""
@@ -744,23 +747,36 @@ class GurunaviScraper:
             return False
     
     def get_chromedriver_path(self):
-        """ChromeDriverパス取得"""
-        # ローカル
-        local_driver = Path.cwd() / "chromedriver.exe"
-        if local_driver.exists():
-            return str(local_driver)
+        """ChromeDriverパス取得（専用フォルダ対応）"""
+        # 1. 専用driversフォルダを最優先
+        if self.chromedriver_path.exists():
+            self.logger.info(f"専用フォルダのChromeDriverを使用: {self.chromedriver_path}")
+            return str(self.chromedriver_path)
         
-        # 設定ファイル
-        config_path = self.config.get("chromedriver_path", "")
-        if config_path and Path(config_path).exists():
-            return config_path
+        # 2. レガシー：実行フォルダ直下（後方互換性）
+        legacy_driver = self.app_dir / "chromedriver.exe"
+        if legacy_driver.exists():
+            self.logger.info(f"実行フォルダ直下のChromeDriverを使用: {legacy_driver}")
+            # 専用フォルダに移動
+            try:
+                shutil.move(str(legacy_driver), str(self.chromedriver_path))
+                self.logger.info(f"ChromeDriverを専用フォルダに移動しました")
+                return str(self.chromedriver_path)
+            except Exception as e:
+                self.logger.warning(f"移動失敗: {e}")
+                return str(legacy_driver)
         
-        # webdriver-manager
+        # 3. webdriver-manager（最後の手段）
         if WEBDRIVER_MANAGER_AVAILABLE:
             try:
-                return ChromeDriverManager().install()
-            except:
-                pass
+                self.logger.info("webdriver-managerでChromeDriverを取得")
+                downloaded_path = ChromeDriverManager().install()
+                # 専用フォルダにコピー
+                shutil.copy2(downloaded_path, self.chromedriver_path)
+                self.logger.info(f"webdriver-managerから専用フォルダにコピー")
+                return str(self.chromedriver_path)
+            except Exception as e:
+                self.logger.error(f"webdriver-manager エラー: {e}")
         
         return None
     
@@ -916,7 +932,7 @@ class GurunaviScraper:
         
         # 有効パターン
         valid_patterns = [
-            r'r\.gnavi\.co\.jp/[a-zA-Z0-9]+/?',
+            r'r\.gnavi\.co\.jp/[a-zA-Z0-9]+/?'
             r'r\.gnavi\.co\.jp/[a-zA-Z0-9]+/[a-zA-Z0-9]*/?'
         ]
         
