@@ -6,13 +6,10 @@
 
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
-import requests
-from bs4 import BeautifulSoup
-import pandas as pd
 import time
 import os
 import re
-from urllib.parse import urljoin, quote, urlparse
+from urllib.parse import urljoin, quote, urlparse, urlencode
 import threading
 from datetime import datetime
 import random
@@ -109,7 +106,6 @@ class GurunaviURLGenerator:
             return f"{self.base_url}/city/{city_code}/rs/"
         
         # 未登録の場合はフリーワード検索
-        from urllib.parse import urlencode
         params = {'fwp': city}
         query_string = urlencode(params)
         return f"{self.base_url}/area/{pref_code}/rs/?{query_string}"
@@ -463,11 +459,33 @@ class GurunaviScraper:
         ttk.Checkbutton(chrome_frame, text="ヘッドレスモード", 
                        variable=self.headless_var).grid(row=0, column=0, sticky=tk.W)
         
+        # ChromeDriverステータス表示
+        ttk.Label(chrome_frame, text="ChromeDriverの場所:").grid(row=1, column=0, sticky=tk.W, pady=(10, 5))
+        driver_status = "✅ 利用可能" if self.chromedriver_path.exists() else "❌ 未設定"
+        ttk.Label(chrome_frame, text=f"{self.drivers_dir}/chromedriver.exe").grid(row=2, column=0, sticky=tk.W)
+        ttk.Label(chrome_frame, text=driver_status).grid(row=3, column=0, sticky=tk.W, pady=(5, 10))
+        
         # ChromeDriver修正ボタン
-        ttk.Button(chrome_frame, text="ChromeDriver修正", command=self.fix_chromedriver).grid(row=1, column=0, pady=(10, 0))
+        ttk.Button(chrome_frame, text="ChromeDriver修正", command=self.fix_chromedriver).grid(row=4, column=0, pady=(10, 0))
+        
+        # フォルダ構成説明
+        info_frame = ttk.LabelFrame(self.config_tab, text="フォルダ構成", padding="15")
+        info_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(15, 0))
+        
+        folder_info = (
+            "📁 ツールのフォルダ構成:\n\n"
+            f"├── gurunavi_scraper.exe (メインツール)\n"
+            f"├── drivers/\n"
+            f"│   └── chromedriver.exe (Chrome制御用)\n"
+            f"├── output/\n"
+            f"│   └── *.xlsx (取得結果ファイル)\n"
+            f"├── scraper_config.json (設定ファイル)\n"
+            f"└── scraper.log (ログファイル)"
+        )
+        ttk.Label(info_frame, text=folder_info, justify=tk.LEFT).grid(row=0, column=0, sticky=tk.W)
         
         # 設定保存
-        ttk.Button(self.config_tab, text="設定保存", command=self.save_current_config).grid(row=1, column=0, pady=(15, 0))
+        ttk.Button(self.config_tab, text="設定保存", command=self.save_current_config).grid(row=2, column=0, pady=(15, 0))
     
     def setup_log_tab(self):
         """ログタブ設定"""
@@ -526,7 +544,7 @@ class GurunaviScraper:
             self.url_var.set(url)
             
         except Exception as e:
-            pass
+            self.url_var.set(f"URL生成エラー: {e}")
     
     def browse_save_path(self):
         """保存先選択"""
